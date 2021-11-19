@@ -29,7 +29,7 @@ class WindowManager:
         self.org_img = cv.imread(img_path)
         self.disp_img = self.org_img.copy()
         self.out_img = np.zeros(self.org_img.shape, np.uint8)
-        self.mask = np.zeros(self.org_img.shape, np.uint8)
+        self.mask = np.zeros(self.org_img.shape[:2], np.uint8)
         cv.namedWindow(self.INPUT_WINDOW, cv.WINDOW_AUTOSIZE |
                        cv.WINDOW_KEEPRATIO | cv.WINDOW_GUI_NORMAL)
         cv.namedWindow(self.OUTPUT_WINDOW, cv.WINDOW_AUTOSIZE |
@@ -39,8 +39,6 @@ class WindowManager:
         self.reset_state()
 
     def run(self):
-        # print(hash(self.disp_img.tobytes()))
-
         self.draw_ns.brush_mode = BRUSH_MODES["bg"]
         key_to_mode = {
             '0': BRUSH_MODES["bg"],
@@ -59,7 +57,7 @@ class WindowManager:
         while True:
             cv.imshow(self.INPUT_WINDOW, self.disp_img)
             hard_mask = (self.mask == 1) | (self.mask == 3)
-            self.out_img = self.org_img*hard_mask
+            self.out_img = self.org_img*hard_mask[:, :, None]
 
             cv.imshow(self.OUTPUT_WINDOW, self.out_img)
             k = cv.waitKey(1)
@@ -75,12 +73,11 @@ class WindowManager:
 
     def perform_segmentation(self):
         #updates the mask to corresponding segmentation
-        print(self.init_mode)
         tmp1 = np.zeros((1, 65), np.float64)
         tmp2 = tmp1.copy()
-        print(self.rect.shape)
+        # print(self.rect.shape)
 
-        self.grabcut_fn(self.disp_img,
+        self.grabcut_fn(self.org_img,
                         self.mask,
                         self.rect,
                         tmp1,
@@ -88,7 +85,7 @@ class WindowManager:
                         1,
                         self.init_mode
                         )
-        self.init_mode = False
+        self.init_mode = cv.GC_INIT_WITH_MASK
 
     def toggle_rect_draw_mode(self):
         self.draw_ns.rect_on = not self.draw_ns.rect_on
