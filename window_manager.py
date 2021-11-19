@@ -35,7 +35,7 @@ class WindowManager:
         cv.namedWindow(self.OUTPUT_WINDOW, cv.WINDOW_AUTOSIZE |
                        cv.WINDOW_KEEPRATIO | cv.WINDOW_GUI_NORMAL)
         cv.setMouseCallback(self.INPUT_WINDOW, self.mouse_callback)
-        cv.moveWindow(self.INPUT_WINDOW, self.org_img.shape[1]+10, 90)
+        cv.moveWindow(self.INPUT_WINDOW, self.org_img.shape[1]+110, 0)
         self.reset_state()
 
     def run(self):
@@ -55,11 +55,11 @@ class WindowManager:
         }
 
         while True:
-            cv.imshow(self.INPUT_WINDOW, self.disp_img)
             hard_mask = (self.mask == 1) | (self.mask == 3)
             self.out_img = self.org_img*hard_mask[:, :, None]
 
             cv.imshow(self.OUTPUT_WINDOW, self.out_img)
+            cv.imshow(self.INPUT_WINDOW, self.disp_img)
             k = cv.waitKey(1)
             if k < 0:
                 continue
@@ -161,7 +161,3 @@ class WindowManager:
                 mark_circle()
                 self.init_mode = cv.GC_INIT_WITH_MASK
 
-
-if __name__ == '__main__':
-    wm = WindowManager("messi5.jpg")
-    wm.run()
