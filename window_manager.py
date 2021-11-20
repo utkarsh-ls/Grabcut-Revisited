@@ -39,7 +39,6 @@ class WindowManager:
         self.reset_state()
 
     def run(self):
-        self.draw_ns.brush_mode = BRUSH_MODES["bg"]
         key_to_mode = {
             '0': BRUSH_MODES["bg"],
             "1": BRUSH_MODES["fg"],
@@ -105,6 +104,7 @@ class WindowManager:
         self.draw_ns.ix = 0
         self.draw_ns.iy = 0
         self.draw_ns.brush_sz = 3
+        self.draw_ns.brush_mode = BRUSH_MODES["bg"]
 
     def mouse_callback(self, event, x, y, flags, param):
         def mark_circle():
