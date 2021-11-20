@@ -94,6 +94,7 @@ class WindowManager:
         print("Output image saved at ", file_path)
 
     def reset_state(self):
+        self.disp_img = self.org_img.copy()
         self.rect = (0, 0, 1, 1)
         self.init_mode = cv.GC_INIT_WITH_RECT
         self.drawing = True
