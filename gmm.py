@@ -7,8 +7,8 @@ class GMM:
         self.num_features = X.shape[1]
         self.samples = np.zeros(self.num_components)
         self.coefficients = np.zeros(self.num_components)
-        self.means = np.zereros((self.num_components, self.num_features))
-        self.covariance = np.zeroes((self.num_components,self.num_features, self.num_features))
+        self.means = np.zeros((self.num_components, self.num_features))
+        self.covariance = np.zeros((self.num_components,self.num_features, self.num_features))
 
         ## Initializing GMM weights with KMeans
         labels = KMeans(n_clusters=self.num_components,n_init=1).fit(X).labels_
@@ -20,8 +20,8 @@ class GMM:
         if self.coefficients[c_i] > 0:
             Δ = X - self.means[c_i]
             x1 = np.dot(np.linalg.inv(self.covariance[c_i]), Δ.T).T
-            Σ = np.sum(diff * x1, axis=1)
-            score = np.exp(-Σ/2) / (np.sqrt(2 * np.pi * np.linalg.det(self.covariance[c_i]))
+            Σ = np.sum(Δ * x1, axis=1)
+            score = np.exp(-Σ/2) / (np.sqrt(2 * np.pi * np.linalg.det(self.covariance[c_i])))
             return score
         
     def prob(self, X)->np.ndarray:
@@ -31,7 +31,7 @@ class GMM:
     
     def component(self, X)->np.ndarray:
         """ Predicts which GMM component the samples belong to """
-        probs = np.array(list(map(lambda x: self.score(X,x), list(range(self.num_components)))))
+        probs = np.array(list(map(lambda x: self.score(X,x), list(range(self.num_components))))).T
         return np.argmax(probs,axis=1)
 
 
@@ -48,7 +48,7 @@ class GMM:
         for c_i in unique_labels:
             num = self.samples[c_i]
 
-            self.coeffients[c_i] = self.samples[c_i] / np.sum(self.samples)
+            self.coefficients[c_i] = self.samples[c_i] / np.sum(self.samples)
             self.means[c_i] = np.mean(X[c_i==labels], axis=0)
             if self.samples[c_i] <= 1:
                 self.covariance[c_i] = 0

@@ -56,6 +56,12 @@ class WindowManager:
         while True:
             hard_mask = (self.mask == 1) | (self.mask == 3)
             self.out_img = self.org_img*hard_mask[:, :, None]
+            from time import time
+            stime=time()
+            # if time()-stime>1:
+            # print("INrun",self.mask.sum(),self.mask.std())
+                # stime=time()
+
 
             cv.imshow(self.OUTPUT_WINDOW, self.out_img)
             cv.imshow(self.INPUT_WINDOW, self.disp_img)
@@ -75,7 +81,7 @@ class WindowManager:
         tmp1 = np.zeros((1, 65), np.float64)
         tmp2 = tmp1.copy()
         # print(self.rect.shape)
-
+        print("selfi",self.mask.sum(),self.mask.std())
         self.grabcut_fn(self.org_img,
                         self.mask,
                         self.rect,
