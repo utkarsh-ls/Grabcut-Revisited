@@ -2,35 +2,161 @@ from typing import Tuple
 import numpy as np
 import igraph as ig
 from gmm import GMM
-import types
+from enum import Enum
 
-MASK_VALUE = {
 
-    "bg": 0,
-    "fg": 1,
-    "pr_bg": 2,
-    "pr_fg": 3,
-}
+class MaskValues:
+    bg = 0
+    fg = 1
+    pr_fg = 2
+    pr_bg = 3
+    
+    
 
 # These are the best no of GMM components K
 # that were mentioned in paper
 gmm_components = 5
 gamma = 50
-beta = 0
+
+class Graph:
+    strong_edges_wt = 9*gamma
+    weak_edges_wt = 0
+    def __init__(self, img_shape) -> None:
+        self.img_shape = img_shape
+        self.n_nodes  = img_shape[0]*img_shape[1] + 2
+        self.source = self.n_nodes - 2      # FG terminal
+        self.sink  = self.n_nodes - 1       # BG terminal
+    
+    def set_edges(self, img, mask, fg_gmm: GMM, bg_gmm:GMM):
+        # nodes (only pixels not source and sink)
+        px_nodes = np.arange(self.n_nodes-2).reshape(mask.shape)
+        edges = []
+        weights = []
+        # color diff for horizontal edges
+        # -
+        edges.extend(np.hstack((px_nodes[:, :-1].flatten(), px_nodes[:, 1:].flatten())))
+        col_del_hori = np.linalg.norm(img[:, :-1] - img[:, 1:], axis=-1).flatten()**2         
+        # |
+        edges.extend(np.hstack((px_nodes[:-1, :].flatten(), px_nodes[1:, :].flatten())))
+        col_del_vert = np.linalg.norm(img[:-1, :] - img[1:, :], axis=-1).flatten()**2         
+        # \
+        edges.extend(np.hstack((px_nodes[:-1, :-1].flatten(), px_nodes[1:, 1:].flatten())))
+        col_del_dig1 = np.linalg.norm(img[:-1, :-1] - img[1:, 1:], axis=-1).flatten()**2      
+        # /
+        edges.extend(np.hstack((px_nodes[:-1, 1:].flatten(), px_nodes[1:, :-1].flatten())))
+        col_del_dig2 = np.linalg.norm(img[:-1, 1:] - img[1:, :-1], axis=-1).flatten()**2      
+
+
+        del_mean = np.hstack((col_del_hori, col_del_vert, col_del_dig1, col_del_dig2)).mean()
+        beta = 1/(2 * del_mean)
+
+        def smoothness(col_diff):
+            return gamma * np.exp( -beta * col_diff)
+        
+        weights.extend(smoothness(col_del_hori))
+        weights.extend(smoothness(col_del_vert))
+        weights.extend(smoothness(col_del_dig1))
+        weights.extend(smoothness(col_del_dig2))
+        
+
+
+        sure_fg_nodes = px_nodes[mask==MaskValues.fg]  # already flattened array
+        sure_bg_nodes = px_nodes[mask==MaskValues.bg]
+        pr_nodes = px_nodes[(mask==MaskValues.pr_bg) | (mask ==MaskValues.pr_fg)]
+        pr_nodes_cols = img[(mask==MaskValues.pr_bg) | (mask ==MaskValues.pr_fg)]
+
+        def single_to_many_update(source, dests, wt):
+            print("LLLLL", len(edges), len(weights))
+            edges.extend(np.hstack(( np.full(dests.size, source), dests )))
+            weights.extend( np.ones_like(dests)*wt)
+            print(len(edges), len(weights))
+
+
+        # sure fg - source
+        single_to_many_update(self.source, sure_fg_nodes, self.strong_edges_wt)
+        # sure fg - sink
+        single_to_many_update(self.sink, sure_fg_nodes, self.weak_edges_wt)
+
+        # sure bg - source
+        single_to_many_update(self.source, sure_bg_nodes, self.weak_edges_wt)
+
+        # sure bg - sink
+        single_to_many_update(self.sink, sure_bg_nodes, self.strong_edges_wt)
+
+        # pr - source
+        bg_scores = bg_gmm.prob(pr_nodes_cols)
+        single_to_many_update(self.source,pr_nodes, -np.log(bg_scores))
+        # pr - sink
+        fg_scores = fg_gmm.prob(pr_nodes_cols)
+        single_to_many_update(self.sink,pr_nodes, -np.log(fg_scores))
+
+        r,c = mask.shape
+        assert len(edges) == len(weights) == (4*r*c -3(r + c) + 2),( 
+            f"edges length: {len(edges)},wt len: {len(weights)}, "
+            # exp len: {(4*r*c -3(r + c) + 2)}, {r}, {c}"
+        )
+
+        self.edges = edges
+        self.weights = weights
+
+        
+    def mincut(self):
+        graph = ig.Graph(self.n_nodes)
+        graph.add_edges(self.edges)
+        ret = graph.st_mincut(self.source,self.sink, self.weights)
+        if self.source in ret.partition[0]:
+            fg_nodes, bg_nodes = ret.partition[0], ret.partition[1]
+        else:
+            fg_nodes, bg_nodes = ret.partition[1], ret.partition[0]
+        h,w = self.img_shape
+
+        fg_i = fg_nodes /w 
+        fg_j = fg_nodes %w
+        bg_i = bg_nodes /w 
+        bg_j = bg_nodes %w
+
+        return (fg_i, fg_j), (bg_i, bg_j)
+
+        
 
 
 
-def GrabCut(img, init_mask, rect=None):
-    # If we don’t define dtype in the syntax, it is defined by default inferred from the input data.
-    img = np.asarray(img, dtype=np.float64)
+
+
+
+
+
+def GrabCut(img, init_mask=None, rect=None, max_itrs=1):
+
+    img = np.array(img, dtype=np.int)
     rows = img.shape[0]
     cols = img.shape[1]
-    # _=img.shape[2]
-    mask = init_mask
-    if rect is None:
-        pass
+
+    if rect:
+        mask = np.full(img.shape[:2], MaskValues.bg)
+        mask[rect[1]:rect[1] + rect[3], rect[0]:rect[0] + rect[2]] = MaskValues.pr_fg
     else:
-        mask[rect[1]:rect[1] + rect[3], rect[0]:rect[0] + rect[2]] = MASK_VALUE['pr_fg']
+        assert init_mask is not None
+        mask = np.array(init_mask, np.int)
+
+    graph = Graph(mask.shape)
+
+    def fit_gmms():
+        fg_mask = (mask == MaskValues.fg ) | (mask == MaskValues.pr_fg)
+        bg_mask = (mask == MaskValues.bg ) | (mask == MaskValues.pr_bg)
+        return GMM(img[fg_mask]), GMM(img[bg_mask])  # fit is called inside __init__
+
+    for _ in range(max_itrs):
+        fg_gmm, bg_gmm = fit_gmms()
+        graph.set_edges(img, mask, fg_gmm, bg_gmm)
+        fg_idxs, bg_idxs = graph.mincut()
+        mask[fg_idxs] = MaskValues.pr_fg
+        mask[bg_idxs] = MaskValues.pr_bg
+    
+    return mask 
+
+
+
     bgd_indexes, fgd_indexes = classify_pixel(mask)
 
     print("bg count = ", bgd_indexes[0].size, end="")
@@ -53,8 +179,6 @@ def GrabCut(img, init_mask, rect=None):
     bgd_gmm = GMM(img[bgd_indexes])
     fgd_gmm = GMM(img[fgd_indexes])
 
-    #RUN wala karna hai ab ....
-    # RUN part
     #for number of grabcut iterations
     ITERATION_CNT=1
     for _ in range(ITERATION_CNT):
@@ -85,9 +209,9 @@ def GrabCut(img, init_mask, rect=None):
 
 def classify_pixel(mask):
     bgd_indexes = np.where(np.logical_or(
-        mask == MASK_VALUE['bg'], mask == MASK_VALUE['pr_bg']))
+        mask == MaskValues.bg, mask == MaskValues.pr_bg))
     fgd_indexes = np.where(np.logical_or(
-        mask == MASK_VALUE['fg'], mask == MASK_VALUE['pr_fg']))
+        mask == MaskValues.fg, mask == MaskValues.pr_fg))
 
     if bgd_indexes[0].size <= 0:
         print("Incorrect value : error in bg indexes")
@@ -135,9 +259,9 @@ def calc_beta_smoothness(img, rows, cols, smoothness):
 def construct_gc_graph(mask,gc,bgd_gmm:GMM,fgd_gmm:GMM,rows,cols,smoothness,img):
     edges,gc["graph_capacity"]=[],[]
     mask=mask.reshape(-1) #Edited in mask : NOTE FOR ERROR
-    fg_idx=np.where(mask==MASK_VALUE["fg"])
-    bg_idx=np.where(mask==MASK_VALUE["bg"])
-    pr_idx=np.where(np.logical_or(mask==MASK_VALUE["pr_fg"],mask==MASK_VALUE["pr_bg"]))
+    fg_idx=np.where(mask==MaskValues.fg)
+    bg_idx=np.where(mask==MaskValues.bg)
+    pr_idx=np.where(np.logical_or(mask==MaskValues.pr_fg, MaskValues.pr_bg))
 
     print("bg count = ", len(bg_idx[0]), end="")
     print("fg count = ", len(fg_idx[0]),end='')
@@ -233,16 +357,14 @@ def construct_gc_graph(mask,gc,bgd_gmm:GMM,fgd_gmm:GMM,rows,cols,smoothness,img)
     print("bg pixels = ", len(mincut.partition[0]), end="")
     print("fg pixels = ", len(mincut.partition[1]))
     mask=mask.reshape(rows,cols)
-    pr_idx = (mask == MASK_VALUE['pr_fg']) | (mask == MASK_VALUE['pr_bg'])
+    pr_idx = (mask == MaskValues.pr_fg) | (MaskValues.pr_bg)
     print("shapes ",pr_idx.shape,mask.shape)
     img_index = np.arange(rows * cols).astype("uint32")
     img_index=img_index.reshape(rows, cols)
     print(img_index[pr_idx].shape)
     print("mask pr " ,mask[pr_idx].shape)
     print(np.isin(img_index[pr_idx], mincut.partition[0]).shape)
-    # mask[np.isin(img_index[pr_idx], mincut.partition[0])]=MASK_VALUE['pr_fg']
-    # mask[np.isin(img_index[pr_idx], mincut.partition[1])]=MASK_VALUE['pr_bg']
-    mask[pr_idx] = np.where(np.isin(img_index[pr_idx], mincut.partition[0]),MASK_VALUE['pr_fg'], MASK_VALUE['pr_bg'])
+    mask[pr_idx] = np.where(np.isin(img_index[pr_idx], mincut.partition[0]),MaskValues.pr_fg, MaskValues.pr_bg)
     
     classify_pixel(mask)
 

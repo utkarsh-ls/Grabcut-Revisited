@@ -5,15 +5,15 @@ def grabcut_fn(img,mask,rect,tmp1,tmp2,itr,mode):
     if mode==1:
         rect=None
     
-    GrabCut(img,mask,rect)
+    mask = GrabCut(img,mask,rect)
     # gc.run(skip_learn_GMMs=(mode==0))
     # mask[:]=gc.mask
     # print("ingcu",mask.sum(),mask.std())
 
 
 
-
+import sys
 if __name__ == '__main__':
-    wm = WindowManager("messi5.jpg", grabcut_fn)
+    wm = WindowManager(sys.argv[1], grabcut_fn)
     wm.run()
 
