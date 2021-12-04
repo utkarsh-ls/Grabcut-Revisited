@@ -6,10 +6,10 @@ from enum import Enum
 
 
 class MaskValues:
-    bg = 0
-    fg = 1
-    pr_fg = 2
-    pr_bg = 3
+    fg = 0
+    bg = 1
+    pr_bg = 2
+    pr_fg = 3
     
     
 
@@ -34,16 +34,16 @@ class Graph:
         weights = []
         # color diff for horizontal edges
         # -
-        edges.extend(np.hstack((px_nodes[:, :-1].flatten(), px_nodes[:, 1:].flatten())))
+        edges.extend(np.hstack((px_nodes[:, :-1].reshape(-1, 1), px_nodes[:, 1:].reshape(-1, 1))))
         col_del_hori = np.linalg.norm(img[:, :-1] - img[:, 1:], axis=-1).flatten()**2         
         # |
-        edges.extend(np.hstack((px_nodes[:-1, :].flatten(), px_nodes[1:, :].flatten())))
+        edges.extend(np.hstack((px_nodes[:-1, :].reshape(-1, 1), px_nodes[1:, :].reshape(-1, 1))))
         col_del_vert = np.linalg.norm(img[:-1, :] - img[1:, :], axis=-1).flatten()**2         
         # \
-        edges.extend(np.hstack((px_nodes[:-1, :-1].flatten(), px_nodes[1:, 1:].flatten())))
+        edges.extend(np.hstack((px_nodes[:-1, :-1].reshape(-1, 1), px_nodes[1:, 1:].reshape(-1, 1))))
         col_del_dig1 = np.linalg.norm(img[:-1, :-1] - img[1:, 1:], axis=-1).flatten()**2      
         # /
-        edges.extend(np.hstack((px_nodes[:-1, 1:].flatten(), px_nodes[1:, :-1].flatten())))
+        edges.extend(np.hstack((px_nodes[:-1, 1:].reshape(-1, 1), px_nodes[1:, :-1].reshape(-1, 1))))
         col_del_dig2 = np.linalg.norm(img[:-1, 1:] - img[1:, :-1], axis=-1).flatten()**2      
 
 
@@ -66,10 +66,10 @@ class Graph:
         pr_nodes_cols = img[(mask==MaskValues.pr_bg) | (mask ==MaskValues.pr_fg)]
 
         def single_to_many_update(source, dests, wt):
-            print("LLLLL", len(edges), len(weights))
-            edges.extend(np.hstack(( np.full(dests.size, source), dests )))
+            li = len(edges)
+            edges.extend(np.hstack(( np.full(dests.size, source).reshape(-1,1), dests.reshape(-1,1) )))
             weights.extend( np.ones_like(dests)*wt)
-            print(len(edges), len(weights))
+            print("delta: ", len(edges) - li)
 
 
         # sure fg - source
@@ -91,10 +91,11 @@ class Graph:
         single_to_many_update(self.sink,pr_nodes, -np.log(fg_scores))
 
         r,c = mask.shape
-        assert len(edges) == len(weights) == (4*r*c -3(r + c) + 2),( 
-            f"edges length: {len(edges)},wt len: {len(weights)}, "
-            # exp len: {(4*r*c -3(r + c) + 2)}, {r}, {c}"
-        )
+        print(len(edges))
+        assert len(edges) == len(weights) ,f"edges length: {len(edges)},wt len: {len(weights)}"
+
+
+        # assert len(edges) == (4*r*c -3*(r + c) + 2) , f"edges length: {len(edges)},{r}, {c},{4*r*c -3*(r + c) + 2} "
 
         self.edges = edges
         self.weights = weights
@@ -108,11 +109,16 @@ class Graph:
             fg_nodes, bg_nodes = ret.partition[0], ret.partition[1]
         else:
             fg_nodes, bg_nodes = ret.partition[1], ret.partition[0]
+        
+        fg_nodes.remove(self.source)
+        bg_nodes.remove(self.sink)
+        fg_nodes = np.asarray(fg_nodes)
+        bg_nodes = np.asarray(bg_nodes)
         h,w = self.img_shape
 
-        fg_i = fg_nodes /w 
+        fg_i = fg_nodes //w 
         fg_j = fg_nodes %w
-        bg_i = bg_nodes /w 
+        bg_i = bg_nodes //w 
         bg_j = bg_nodes %w
 
         return (fg_i, fg_j), (bg_i, bg_j)
@@ -147,12 +153,18 @@ def GrabCut(img, init_mask=None, rect=None, max_itrs=1):
         return GMM(img[fg_mask]), GMM(img[bg_mask])  # fit is called inside __init__
 
     for _ in range(max_itrs):
+        print(1)
         fg_gmm, bg_gmm = fit_gmms()
+        print(2)
         graph.set_edges(img, mask, fg_gmm, bg_gmm)
+        print(3)
         fg_idxs, bg_idxs = graph.mincut()
+        print(4)
         mask[fg_idxs] = MaskValues.pr_fg
         mask[bg_idxs] = MaskValues.pr_bg
+        print("4.5")
     
+    print(5)
     return mask 
 
 
