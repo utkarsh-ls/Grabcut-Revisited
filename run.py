@@ -1,19 +1,16 @@
+import sys
 from window_manager import WindowManager
-from grabcut import GrabCut
+from grabcut import grabcut
 
-def grabcut_fn(img,mask,rect,tmp1,tmp2,itr,mode):
+def grabcut_fn(img, mask, rect, n_itrs, mode):
     if mode==1:
         rect=None
-    
-    mask[:] = GrabCut(img,mask,rect)
-    # gc.run(skip_learn_GMMs=(mode==0))
-    # mask[:]=gc.mask
-    # print("ingcu",mask.sum(),mask.std())
+    mask[:] = grabcut(img,mask,rect, n_itrs)
 
 
 
-import sys
 if __name__ == '__main__':
-    wm = WindowManager(sys.argv[1], grabcut_fn)
+    file = sys.argv[1] if len(sys.argv) > 1 else "messi5.jpg"
+    wm = WindowManager(file, grabcut_fn)
     wm.run()
 

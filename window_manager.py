@@ -1,30 +1,23 @@
 import numpy as np
 import types
 import cv2 as cv
-
-###### Constants ##########
-COLORS = types.SimpleNamespace(
-    red=[255, 0, 0],
-    green=[0, 255, 0],
-    blue=[0, 0, 255],
-    black=[0, 0, 0],
-    white=[255, 255, 255]
-)
+from constants import N_ITERS, Colors, MaskValues
 
 BRUSH_MODES = {
-    "bg": {"col": COLORS.black, "mask_val": 0},
-    "fg": {"col": COLORS.white, "mask_val": 1},
-    "pr_bg": {"col": COLORS.red, "mask_val": 2},
-    "pr_fg": {"col": COLORS.green, "mask_val": 3},
+    "bg": {"col": Colors.BLACK, "mask_val": MaskValues.bg},
+    "fg": {"col": Colors.WHITE, "mask_val": MaskValues.fg},
+    "pr_bg": {"col": Colors.RED, "mask_val": MaskValues.pr_bg},
+    "pr_fg": {"col": Colors.GREEN, "mask_val": MaskValues.pr_fg},
 }
-###########################
+
+RECT_COLOR = Colors.BLUE
 
 
 class WindowManager:
     INPUT_WINDOW = 'input'
     OUTPUT_WINDOW = 'output'
 
-    def __init__(self, img_path: str, grabcut_fn=cv.grabCut):
+    def __init__(self, img_path: str, grabcut_fn):
         self.grabcut_fn = grabcut_fn
         self.org_img = cv.imread(img_path)
         self.disp_img = self.org_img.copy()
@@ -71,15 +64,11 @@ class WindowManager:
                 key_to_act[k]()
 
     def perform_segmentation(self):
-        #updates the mask to corresponding segmentation
-        tmp1 = np.zeros((1, 65), np.float64)
-        tmp2 = tmp1.copy()
+        #updates the mask inplace to corresponding segmentation
         self.grabcut_fn(self.org_img,
                         self.mask,
                         self.rect,
-                        tmp1,
-                        tmp2,
-                        1,
+                        N_ITERS,
                         self.init_mode
                         )
         self.init_mode = cv.GC_INIT_WITH_MASK
@@ -115,7 +104,7 @@ class WindowManager:
         def mark_rectangle(set_rect=False):
             ix, iy = self.draw_ns.ix, self.draw_ns.iy
             img = self.org_img.copy()
-            cv.rectangle(img, (ix, iy), (x, y), COLORS.blue, 2)
+            cv.rectangle(img, (ix, iy), (x, y), RECT_COLOR, 2)
             self.disp_img = img
 
             if set_rect:

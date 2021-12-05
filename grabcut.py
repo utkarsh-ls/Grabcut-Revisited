@@ -1,21 +1,7 @@
-from typing import Tuple
 import numpy as np
 import igraph as ig
+from constants import GAMMA, GMM_COMPONENTS, N_ITERS, MaskValues, timing
 from gmm import GMM
-from enum import Enum
-
-
-class MaskValues:
-    bg = 0
-    fg = 1
-    pr_bg = 2
-    pr_fg = 3
-
-
-# These are the best no of GMM components K
-# that were mentioned in paper
-gmm_components = 5
-gamma = 50
 
 
 class Graph:
@@ -61,7 +47,7 @@ class Graph:
         beta = 1/(2 * del_mean)
 
         def smoothness(col_diff):
-            return gamma * np.exp(-beta * col_diff)
+            return GAMMA * np.exp(-beta * col_diff)
 
         weights.extend(smoothness(col_del_hori))
         exp_length += r*(c-1)
@@ -131,8 +117,8 @@ class Graph:
         bg_nodes.remove(self.sink)
         return fg_nodes, bg_nodes
 
-
-def GrabCut(img, init_mask=None, rect=None, n_itrs=1):
+@timing
+def grabcut(img, init_mask=None, rect=None, n_itrs=N_ITERS):
     img = np.array(img, dtype=np.int)
 
     if rect:
@@ -151,8 +137,10 @@ def GrabCut(img, init_mask=None, rect=None, n_itrs=1):
         fg_mask = (mask == MaskValues.fg) | (mask == MaskValues.pr_fg)
         bg_mask = (mask == MaskValues.bg) | (mask == MaskValues.pr_bg)
         # fit is called inside __init__
-        return GMM(img[fg_mask]), GMM(img[bg_mask])
-
+        return (
+            GMM(img[fg_mask], num_components=GMM_COMPONENTS), 
+            GMM(img[bg_mask], num_components=GMM_COMPONENTS)
+            )
     for _ in range(n_itrs):
         fg_gmm, bg_gmm = fit_gmms()
         graph.set_edges(img, mask, fg_gmm, bg_gmm)
