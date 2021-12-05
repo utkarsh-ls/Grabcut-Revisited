@@ -56,12 +56,6 @@ class WindowManager:
         while True:
             hard_mask = (self.mask == 1) | (self.mask == 3)
             self.out_img = self.org_img*hard_mask[:, :, None]
-            from time import time
-            stime=time()
-            # if time()-stime>1:
-            # print("INrun",self.mask.sum(),self.mask.std())
-                # stime=time()
-
 
             cv.imshow(self.OUTPUT_WINDOW, self.out_img)
             cv.imshow(self.INPUT_WINDOW, self.disp_img)
@@ -80,8 +74,6 @@ class WindowManager:
         #updates the mask to corresponding segmentation
         tmp1 = np.zeros((1, 65), np.float64)
         tmp2 = tmp1.copy()
-        # print(self.rect.shape)
-        print("selfi",self.mask.sum(),self.mask.std())
         self.grabcut_fn(self.org_img,
                         self.mask,
                         self.rect,
@@ -122,7 +114,6 @@ class WindowManager:
 
         def mark_rectangle(set_rect=False):
             ix, iy = self.draw_ns.ix, self.draw_ns.iy
-            print((ix, iy), (x, y))
             img = self.org_img.copy()
             cv.rectangle(img, (ix, iy), (x, y), COLORS.blue, 2)
             self.disp_img = img
@@ -132,13 +123,11 @@ class WindowManager:
                 self.rect = (min(ix, x), min(iy, y), abs(ix-x), abs(iy-y))
 
         if event == cv.EVENT_RBUTTONDOWN:
-            print("rdown")
             self.draw_ns.rect_on = True
             self.draw_ns.ix, self.draw_ns.iy = x, y
             self.init_mode = cv.GC_INIT_WITH_RECT
 
         elif event == cv.EVENT_RBUTTONUP:
-            print("rup")
             if self.draw_ns.rect_on:
                 self.draw_ns.rect_on = False
                 mark_rectangle(set_rect=True)
@@ -146,7 +135,6 @@ class WindowManager:
 
         elif event == cv.EVENT_MOUSEMOVE:
             if self.draw_ns.rect_on:
-                print("m rect")
                 mark_rectangle()
 
             elif self.draw_ns.brush_on:
