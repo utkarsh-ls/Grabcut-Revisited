@@ -1,6 +1,7 @@
 import numpy as np
 import igraph as ig
-from constants import GAMMA, GMM_COMPONENTS, N_ITERS, MaskValues, timing
+import constants
+from constants import MaskValues, timing
 from gmm import GMM
 
 
@@ -28,35 +29,54 @@ class Graph:
             assert len(edges) == exp_length, ""\
                 f"e_len: {len(edges)}, exp_len: {exp_length}"
 
+        sum = 0
+        size = 0
         # color diff for horizontal edges
         # -
-        edges.extend(np.hstack((px_nodes[:, :-1].reshape(-1, 1), px_nodes[:, 1:].reshape(-1, 1))))
-        col_del_hori = np.linalg.norm(img[:, :-1] - img[:, 1:], axis=-1).flatten()**2
+        if constants.ROW:
+            edges.extend(np.hstack((px_nodes[:, :-1].reshape(-1, 1), px_nodes[:, 1:].reshape(-1, 1))))
+            col_del_hori = np.linalg.norm(img[:, :-1] - img[:, 1:], axis=-1).flatten()**2
+            sum += col_del_hori.sum()
+            size += len(col_del_hori)
         # |
-        edges.extend(np.hstack((px_nodes[:-1, :].reshape(-1, 1), px_nodes[1:, :].reshape(-1, 1))))
-        col_del_vert = np.linalg.norm(img[:-1, :] - img[1:, :], axis=-1).flatten()**2
+        if constants.COL:
+            edges.extend(np.hstack((px_nodes[:-1, :].reshape(-1, 1), px_nodes[1:, :].reshape(-1, 1))))
+            col_del_vert = np.linalg.norm(img[:-1, :] - img[1:, :], axis=-1).flatten()**2
+            sum += col_del_vert.sum()
+            size += len(col_del_vert)
         # \
-        edges.extend(np.hstack((px_nodes[:-1, :-1].reshape(-1, 1), px_nodes[1:, 1:].reshape(-1, 1))))
-        col_del_dig1 = np.linalg.norm(img[:-1, :-1] - img[1:, 1:], axis=-1).flatten()**2
+        if constants.LD:
+            edges.extend(np.hstack((px_nodes[:-1, :-1].reshape(-1, 1), px_nodes[1:, 1:].reshape(-1, 1))))
+            col_del_dig1 = np.linalg.norm(img[:-1, :-1] - img[1:, 1:], axis=-1).flatten()**2
+            sum += col_del_dig1.sum()
+            size += len(col_del_dig1)
         # /
-        edges.extend(np.hstack((px_nodes[:-1, 1:].reshape(-1, 1), px_nodes[1:, :-1].reshape(-1, 1))))
-        col_del_dig2 = np.linalg.norm(img[:-1, 1:] - img[1:, :-1], axis=-1).flatten()**2
+        if constants.RD:
+            edges.extend(np.hstack((px_nodes[:-1, 1:].reshape(-1, 1), px_nodes[1:, :-1].reshape(-1, 1))))
+            col_del_dig2 = np.linalg.norm(img[:-1, 1:] - img[1:, :-1], axis=-1).flatten()**2
+            sum += col_del_dig2.sum()
+            size += len(col_del_dig2)
 
-        del_mean = np.hstack(
-            (col_del_hori, col_del_vert, col_del_dig1, col_del_dig2)).mean()
-        beta = 1/(2 * del_mean)
+        # del_mean = np.hstack(
+        #     (col_del_hori, col_del_vert, col_del_dig1, col_del_dig2)).mean()
+        del_mean = sum / size
+        beta = 1 / (2 * del_mean)
 
         def smoothness(col_diff):
-            return GAMMA * np.exp(-beta * col_diff)
+            return constants.GAMMA * np.exp(-beta * col_diff)
 
-        weights.extend(smoothness(col_del_hori))
-        exp_length += r*(c-1)
-        weights.extend(smoothness(col_del_vert))
-        exp_length += c*(r-1)
-        weights.extend(smoothness(col_del_dig1))
-        exp_length += (r-1)*(c-1)
-        weights.extend(smoothness(col_del_dig2))
-        exp_length += (r-1)*(c-1)
+        if constants.ROW:
+            weights.extend(smoothness(col_del_hori))
+            exp_length += r*(c-1)
+        if constants.COL:
+            weights.extend(smoothness(col_del_vert))
+            exp_length += c*(r-1)
+        if constants.LD:
+            weights.extend(smoothness(col_del_dig1))
+            exp_length += (r-1)*(c-1)
+        if constants.RD:
+            weights.extend(smoothness(col_del_dig2))
+            exp_length += (r-1)*(c-1)
 
         len_check()
 
@@ -81,7 +101,7 @@ class Graph:
 
         # pr - source
         bg_scores = bg_gmm.prob(pr_nodes_cols)
-        single_to_many_update(self.source, pr_nodes, -np.log(bg_scores))
+        single_to_many_update(self.source, pr_nodes, -np.log(bg_scores + constants.EPS))
 
         exp_length += r*c
         len_check()
@@ -94,12 +114,12 @@ class Graph:
 
         # pr - sink
         fg_scores = fg_gmm.prob(pr_nodes_cols)
-        single_to_many_update(self.sink, pr_nodes, -np.log(fg_scores))
+        single_to_many_update(self.sink, pr_nodes, -np.log(fg_scores + constants.EPS))
 
         exp_length += r*c
         len_check()
 
-        assert exp_length == (6*r*c - 3*(r + c) + 2)
+        # assert exp_length == (6*r*c - 3*(r + c) + 2)
 
         self.edges = edges
         self.weights = weights
@@ -118,7 +138,7 @@ class Graph:
         return fg_nodes, bg_nodes
 
 @timing
-def grabcut(img, init_mask=None, rect=None, n_itrs=N_ITERS):
+def grabcut(img, init_mask=None, rect=None, n_itrs=constants.N_ITERS):
     img = np.array(img, dtype=np.int)
 
     if rect:
@@ -138,9 +158,10 @@ def grabcut(img, init_mask=None, rect=None, n_itrs=N_ITERS):
         bg_mask = (mask == MaskValues.bg) | (mask == MaskValues.pr_bg)
         # fit is called inside __init__
         return (
-            GMM(img[fg_mask], num_components=GMM_COMPONENTS), 
-            GMM(img[bg_mask], num_components=GMM_COMPONENTS)
+            GMM(img[fg_mask], num_components=constants.GMM_COMPONENTS),
+            GMM(img[bg_mask], num_components=constants.GMM_COMPONENTS)
             )
+    print(f"Number of iterations: {n_itrs}")
     for _ in range(n_itrs):
         fg_gmm, bg_gmm = fit_gmms()
         graph.set_edges(img, mask, fg_gmm, bg_gmm)

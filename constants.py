@@ -5,8 +5,11 @@ from time import time
 GAMMA = 50
 N_ITERS = 1
 GMM_COMPONENTS = 5
-
-
+ROW=True
+COL=True
+LD=True
+RD=True
+EPS=10**-10
 
 class Colors:
     RED = [255,0,0]

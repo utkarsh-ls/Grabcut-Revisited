@@ -1,7 +1,10 @@
+import cv2
 import numpy as np
 import types
 import cv2 as cv
-from constants import N_ITERS, Colors, MaskValues
+import constants
+from constants import Colors, MaskValues
+# from constants import Colors, MaskValues
 
 BRUSH_MODES = {
     "bg": {"col": Colors.BLACK, "mask_val": MaskValues.bg},
@@ -62,13 +65,16 @@ class WindowManager:
                 self.draw_ns.brush_mode = key_to_mode[k]
             if k in key_to_act:
                 key_to_act[k]()
+            elif k == "q":
+                cv.destroyAllWindows()
+                return
 
     def perform_segmentation(self):
         #updates the mask inplace to corresponding segmentation
         self.grabcut_fn(self.org_img,
                         self.mask,
                         self.rect,
-                        N_ITERS,
+                        constants.N_ITERS,
                         self.init_mode
                         )
         self.init_mode = cv.GC_INIT_WITH_MASK
